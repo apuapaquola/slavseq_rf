@@ -1,0 +1,66 @@
+#!/bin/bash
+"exec" "snakemake" "--printshellcmds" "--snakefile" "$0" "--jobs" "20"
+
+import glob
+import os.path
+import itertools
+
+SOURCE_DIR = '../../_m'
+EXT = '_R2.fastq.gz'
+
+
+def sample_dict_iter(path, ext):
+    for filename in glob.iglob(path+'/*'+ext):
+        sample = os.path.basename(filename)[:-len(ext)]
+        yield sample, {'r1_in': SOURCE_DIR + '/' + sample + '_R1.fastq.gz',
+		       'r2_in': SOURCE_DIR + '/' + sample + '_R2.fastq.gz',
+		      }
+
+SAMPLE_DICT = {k:v for k,v in sample_dict_iter(SOURCE_DIR, EXT)}
+
+rule all:
+    input:
+        expand('../_m/{sample}_{suffix}.fastq.gz',
+	       sample=SAMPLE_DICT.keys(),
+	       suffix=['R1','R2'])
+
+        
+rule cutadapt:
+    input:
+        r1 = lambda x: SAMPLE_DICT[x.sample]['r1_in'],
+	r2 = lambda x: SAMPLE_DICT[x.sample]['r2_in']
+
+    output:
+        r1 = '../_m/{sample}_R1.fastq.gz',
+        r2 = '../_m/{sample}_R2.fastq.gz'
+
+    params:
+        sample = '{sample}'
+
+    shell:
+        '''
+    R1_ADAPTER='AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'
+    R2_ADAPTER='CAAGCAGAAGACGGCATACGAGANNNNNNNGTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT'
+
+    NESTED_PRIMER='TAACTAACCTGCACAATGTGCAC'
+
+    R1_FRONT=${{R1_ADAPTER}}
+    R2_FRONT=${{R2_ADAPTER}}${{NESTED_PRIMER}}
+    R1_END=`rc ${{R2_FRONT}}`
+    R2_END=`rc ${{R1_FRONT}}`
+
+    QUALITY_BASE=33
+    QUALITY_CUTOFF=28
+    MINIMUM_LENGTH=36
+    ADAPTOR_OVERLAP=5
+    ADAPTOR_TIMES=4
+    
+    ii='{params.sample}'
+
+    cutadapt --quality-base=${{QUALITY_BASE}} --quality-cutoff=${{QUALITY_CUTOFF}} --minimum-length=${{MINIMUM_LENGTH}} --overlap=${{ADAPTOR_OVERLAP}} --times=${{ADAPTOR_TIMES}} --front=${{R1_FRONT}} --adapter=${{R1_END}} --paired-output tmp.2.${{ii}}.fastq -o tmp.1.${{ii}}.fastq {input.r1} {input.r2} > ${{ii}}_R1.cutadapt.out
+
+    cutadapt --quality-base=${{QUALITY_BASE}} --quality-cutoff=${{QUALITY_CUTOFF}} --minimum-length=${{MINIMUM_LENGTH}} --overlap=${{ADAPTOR_OVERLAP}} --times=${{ADAPTOR_TIMES}} --front=${{R2_FRONT}} --adapter=${{R2_END}} --paired-output {output.r1} -o {output.r2} tmp.2.${{ii}}.fastq tmp.1.${{ii}}.fastq > ${{ii}}_R2.cutadapt.out
+
+    rm -f tmp.2.${{ii}}.fastq tmp.1.${{ii}}.fastq
+
+'''

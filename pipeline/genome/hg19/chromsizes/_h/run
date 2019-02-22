@@ -1,0 +1,4 @@
+(
+perl -e 'print "chrom\tsize\n"'
+cut -f 1,2 ../../_m/hg19.fa.fai
+) > hg19.genome

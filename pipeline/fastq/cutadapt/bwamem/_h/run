@@ -1,0 +1,44 @@
+#!/bin/bash
+"exec" "snakemake" "--printshellcmds" "--snakefile" "$0" "--jobs" "1"
+
+import glob
+import os.path
+import itertools
+
+SOURCE_DIR = '../../_m'
+EXT = '_R2.fastq.gz'
+
+
+def sample_dict_iter(path, ext):
+    for filename in glob.iglob(path+'/*'+ext):
+        sample = os.path.basename(filename)[:-len(ext)]
+        yield sample, {'r1_in': SOURCE_DIR + '/' + sample + '_R1.fastq.gz',
+		       'r2_in': SOURCE_DIR + '/' + sample + '_R2.fastq.gz',
+		      }
+
+SAMPLE_DICT = {k:v for k,v in sample_dict_iter(SOURCE_DIR, EXT)}
+
+rule all:
+    input:
+        expand('../_m/{sample}.bam',
+	       sample=SAMPLE_DICT.keys())
+
+
+rule bwamem:
+    input:
+        r1 = lambda x: SAMPLE_DICT[x.sample]['r1_in'],
+	r2 = lambda x: SAMPLE_DICT[x.sample]['r2_in']
+
+    output:
+        '../_m/{sample}.bam'
+
+    params:
+        sample = '{sample}'
+
+    shell:
+        '''
+    GENOME='${{BASE_DIR}}/genome/hg19/bwa/_m/hg19.fa'
+
+    bwa mem -T 19 -t 20 ${{GENOME}} {input.r1} {input.r2} 2> {params.sample}.stderr | samtools view -S -b - > {output}
+
+'''

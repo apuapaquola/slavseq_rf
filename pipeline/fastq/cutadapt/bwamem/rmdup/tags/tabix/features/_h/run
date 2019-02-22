@@ -1,0 +1,64 @@
+#!/bin/bash
+"exec" "snakemake" "--printshellcmds" "--snakefile" "$0" "--jobs" "20"
+
+import glob
+import os.path
+import itertools
+
+SOURCE_DIR = '../../_m'
+EXT = '.bgz'
+
+
+def sample_dict_iter(path, ext):
+    for filename in glob.iglob(path+'/*'+ext):
+        sample = os.path.basename(filename)[:-len(ext)]
+        yield sample, {'filename': SOURCE_DIR + '/' + sample + '.bam'}
+
+        
+SAMPLE_DICT = {k:v for k,v in sample_dict_iter(SOURCE_DIR, EXT)}
+
+rule all:
+    input:
+        expand('../_m/{sample}.{ext}',
+               sample=SAMPLE_DICT.keys(),
+	       ext=['tab.bgz', 'tab.bgz.tbi'])
+
+
+rule features:
+    input:
+        '../../_m/{sample}.bgz'
+
+    output:
+        bgz = '../_m/{sample}.tab.bgz',
+        tbi = '../_m/{sample}.tab.bgz.tbi'
+
+    params:
+        sample = '{sample}'
+
+    shell:
+        '''
+    
+    MIN_YA=20
+    MAX_YG=15
+    LIBRARY_3_OR_5=3
+    MIN_MAPQ=40
+    
+    export LC_ALL=C
+    export PYTHONPATH=${{BASE_DIR}}/code/_h/python
+
+    ~/.local/bin/pyslavseq_extract_features --pilot --genome_fasta_file '${{BASE_DIR}}/genome/hg19/_m/hg19.fa' --library_3_or_5 ${{LIBRARY_3_OR_5}} --occupied --min_mapq ${{MIN_MAPQ}} --min_ya ${{MIN_YA}} --max_yg ${{MAX_YG}} --chromsizes ${{BASE_DIR}}/genome/hg19/chromsizes/_m/hg19.genome --window_size 750 --window_step 250 --min_secondary_mapq 20 {input} --write_header_to {params.sample}.header.txt > {params.sample}.unsorted.txt
+     
+    TMP_DIR=tmp.{params.sample}
+    mkdir ${{TMP_DIR}}
+
+    sort --temporary-directory=${{TMP_DIR}} --buffer-size=1G -k1,1 -k2,2n -k3,3n < {params.sample}.unsorted.txt >  {params.sample}.sorted.txt
+
+    rmdir ${{TMP_DIR}}
+
+    cat {params.sample}.header.txt {params.sample}.sorted.txt | bgzip -c > {output.bgz}
+
+    tabix -S 1 -s 1 -b 2 -e 3 -0 {output.bgz}
+
+    rm -f {params.sample}.header.txt {params.sample}.unsorted.txt {params.sample}.sorted.txt
+
+'''

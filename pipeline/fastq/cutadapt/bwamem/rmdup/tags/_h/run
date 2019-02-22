@@ -1,0 +1,48 @@
+#!/bin/bash
+"exec" "snakemake" "--printshellcmds" "--snakefile" "$0" "--jobs" "10"
+
+import glob
+import os.path
+import itertools
+
+SOURCE_DIR = '../../_m'
+EXT = '.bam'
+
+
+def sample_dict_iter(path, ext):
+    for filename in glob.iglob(path+'/*'+ext):
+        sample = os.path.basename(filename)[:-len(ext)]
+        yield sample, {'filename': SOURCE_DIR + '/' + sample + '.bam'}
+
+        
+SAMPLE_DICT = {k:v for k,v in sample_dict_iter(SOURCE_DIR, EXT)}
+
+rule all:
+    input:
+        expand('../_m/{sample}.bam',
+               sample=SAMPLE_DICT.keys())
+
+
+rule tags:
+    input:
+        '../../_m/{sample}.bam'
+
+    output:
+        '../_m/{sample}.bam'
+
+    params:
+        sample = '{sample}'
+
+    shell:
+        '''
+    export CONSENSUS='ATGTACCCTAAAACTTAGAGTATAATAAA'
+
+    GENOME='${{BASE_DIR}}/genome/hg19/_m/hg19.fa'
+    PREFIX_LENGTH=`perl -e 'print length($ENV{{CONSENSUS}})+2'`
+    R1_FLANK_LENGTH=750
+    R2_FLANK_LENGTH=${{PREFIX_LENGTH}}
+    SOFT_CLIP_LENGTH_THRESHOLD=5
+
+    (samtools view -h {input} | ../_h/add_tags.pl --genome_fasta_file ${{GENOME}} --prefix_length ${{PREFIX_LENGTH}} --consensus ${{CONSENSUS}} --r1_flank_length ${{R1_FLANK_LENGTH}} --r2_flank_length ${{R2_FLANK_LENGTH}} --soft_clip_length_threshold ${{SOFT_CLIP_LENGTH_THRESHOLD}} | samtools view -S -b - > {output}) 2> {params.sample}.stderr
+
+'''

@@ -1,0 +1,3 @@
+echo 'Put your fastq files in fastq/_m'
+exit 1
+

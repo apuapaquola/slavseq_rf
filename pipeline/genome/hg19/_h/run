@@ -1,0 +1,10 @@
+#!/bin/sh
+
+curl http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz | tar xzvf - 
+
+cat *.fa > hg19.fa.tmp
+rm -f *.fa
+mv hg19.fa.tmp hg19.fa 
+
+samtools faidx hg19.fa
+

@@ -1,0 +1,5 @@
+#!/bin/sh
+echo -n "Start: "; date --rfc-3339=seconds
+ln -s ../../_m/*.fa ./
+bwa index *.fa
+echo -n "End: "; date --rfc-3339=seconds

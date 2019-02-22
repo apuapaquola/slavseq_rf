@@ -1,0 +1,34 @@
+#!/bin/bash
+"exec" "snakemake" "--printshellcmds" "--snakefile" "$0" "--jobs" "15"
+
+import glob
+import os.path
+import itertools
+
+SOURCE_DIR = '../../_m'
+EXT = '.bam'
+
+
+def sample_dict_iter(path, ext):
+    for filename in glob.iglob(path+'/*'+ext):
+        sample = os.path.basename(filename)[:-len(ext)]
+        yield sample, {'filename': filename}
+
+
+SAMPLE_DICT = {k:v for k,v in sample_dict_iter(SOURCE_DIR, EXT)}
+
+rule all:
+    input:
+        expand('../_m/{sample}.bam', sample=SAMPLE_DICT.keys())
+
+rule process_one_sample:
+    input:
+        lambda x: SAMPLE_DICT[x.sample]['filename']
+
+    output:
+        '../_m/{sample}.bam'
+    log:
+        stderr = '{sample}.stderr',
+        stdout = '{sample}.stdout'
+    shell:
+        '../_h/slavseq_rmdup.pl {input} {output}'
